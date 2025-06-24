@@ -17,18 +17,25 @@ source("genotyping_functions.r")
 
 # Load all samples and mark controls and duplicates: # some negatives and positives are summarized if they are named the same(?)
 allGenotypes <- ParseGenotypes(genotypePath = "Genotyped_SNPs/")
+
+# Remove duplicates and controls:
+allGenotypes <- allGenotypes[allGenotypes$Status != "Duplicated", ] # no duplicated names are allowed past this point
+allGenotypes <- allGenotypes[allGenotypes$Status != "Control", ] # no controls are allowed past this point
+
+# Separate autosomal genotypes and sexual genotypes if there are no repeated names:
+if(length(allGenotypes$Sample) == length(unique(allGenotypes$Sample))) {
+  sexString <- "X-*|Y-*"
+  autoGenotypes <- allGenotypes[, !grepl(sexString, colnames(allGenotypes))]
+  saveRDS(autoGenotypes, file = "autoGenotypes.rds")
+  sexGenotypes <- cbind(Sample = allGenotypes$Sample, allGenotypes[, grepl(sexString, colnames(allGenotypes))])
+  saveRDS(sexGenotypes, file = "sexGenotypes.rds")
+} else {
+  cat("Error: allGenotypes contains repeated sample names.")
+}
 ```
 
 # Filter/QC samples and loci:
 ```{r}
-# Filter out sex loci:
-# sexString <- "Ua-snp-01y|Ua-snp-02y|Ua-snp-03y|Ua-snp-04y|Ua-snp-196-x|Ua-snp-248-x|Ua-snp-236-x"
-sexString <- "X-*|Y-*"
-autoGenotypes <- allGenotypes[, !grepl(sexString, colnames(allGenotypes))]
-saveRDS(autoGenotypes, file = "autoGenotypes.rds")
-sexGenotypes <- cbind(Sample = allGenotypes$Sample, allGenotypes[, grepl(sexString, colnames(allGenotypes))])
-saveRDS(sexGenotypes, file = "sexGenotypes.rds")
-
 # Mark samples based on quality:
 QCGenotypes <- QCMarking(autoGenotypes, minPresent = 75, targetStatus = c("Loaded"), newStatus = "High Quality") %>%
   QCMarking(minPresent = 67, maxPresent = 74, targetStatus = c("Loaded"), newStatus = "Medium Quality") %>%

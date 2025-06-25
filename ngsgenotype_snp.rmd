@@ -23,7 +23,7 @@ allGenotypes <- allGenotypes[allGenotypes$Status != "Duplicated", ] # no duplica
 allGenotypes <- allGenotypes[allGenotypes$Status != "Control", ] # no controls are allowed past this point
 
 # Separate autosomal genotypes and sexual genotypes if there are no repeated names:
-if(length(allGenotypes$Sample) == length(unique(allGenotypes$Sample))) {
+if(!any(duplicated(allGenotypes$Sample))) {
   sexString <- "X-*|Y-*"
   autoGenotypes <- allGenotypes[, !grepl(sexString, colnames(allGenotypes))]
   saveRDS(autoGenotypes, file = "autoGenotypes.rds")

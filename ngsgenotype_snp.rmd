@@ -41,6 +41,9 @@ QCGenotypes <- QCMarking(autoGenotypes, minPresent = 75, targetStatus = c("Loade
   QCMarking(minPresent = 67, maxPresent = 74, targetStatus = c("Loaded"), newStatus = "Medium Quality") %>%
   QCMarking(minPresent = 24, maxPresent = 66, targetStatus = c("Loaded"), newStatus = "Low Quality") %>%
   QCMarking(minPresent = 00, maxPresent = 23, targetStatus = c("Loaded"), newStatus = "Fail Quality") # perhaps use a more comprehensive function and collapse this into one line
+
+# Quick overview of quality of samples:
+table(QCGenotypes$Status)
 ```
 
 # Cluster all working samples (>= 67 working loci) and identify samples/clusters to be removed:

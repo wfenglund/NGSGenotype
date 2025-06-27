@@ -66,39 +66,28 @@ uniqueBearsAll <- allelematch::amUnique(loadedDataAll$Data, multilocusMap = load
 allelematch::summary.amUnique(object = uniqueBearsAll, html = paste0("unique_bears_all_", mmCutoff, "_v1.html"))
 allelematch::summary.amUnique(object = uniqueBearsAll, csv = paste0("unique_bears_all_", mmCutoff, "_v1.csv"))
 
-# get all clusters from both runs:
+# get clusters and high quality individuals:
 clustersAll <- lapply(uniqueBearsAll$pairwise, function(x) {x$match$index})
-clusters75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"]
+samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # should this be placed after marking unclsassified/multiplematched? To avoid to not keep orphans by mistake?
 
 # check each one and see if they contain any matched sample from '75' run, note all samples in any who doesn't
-GetOrphans <- function(hiqClusters, allClusters, rmSamplesHiq) {
-  realClusters <- 0
+GetOrphans <- function(hiqSamples, allClusters) {
   rmSamples <- c()
-  # clusteredHiq <- unique(do.call(c, hiqClusters))
-  # clusteredHiq <- clusteredHiq[!(clusteredHiq %in% rmSamplesHiq)] # remove samples in supplied remove vector
-  clusteredHiq <- hiqClusters
   for(curCluster in allClusters) {
-    if(any(curCluster %in% clusteredHiq)) {
-      realClusters <- realClusters + 1
-    } else {
+    if(!any(curCluster %in% hiqSamples)) {
       rmSamples <- c(rmSamples, curCluster)
-      # print(curCluster %in% rmSamples)
     }
   }
-  rmSamplesFull <- c(rmSamples, rmSamplesHiq) # add condemned samples from supplied vector
-  return(list(numClusters = realClusters, oldRmSamples = unique(rmSamplesHiq), newRmSamples = unique(rmSamples), updatedRmList = unique(rmSamplesFull)))
+  return(unique(c(rmSamples, "0_EMPTY_NAME"))) # return orphaned samples
 }
 
 # Mark unclassified and multiplematched samples from all run:
 processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$unclassified$index] <- "Unclassified"
 processedGenotypes$Status[processedGenotypes$Sample %in% uniqueBearsAll$multipleMatches$index] <- "MultipleMatched"
 
-# Get orphaned samples and record them:
-orphanData <- GetOrphans(hiqClusters = clusters75, allClusters = clustersAll, rmSamplesHiq = processedGenotypes$Sample[processedGenotypes$Status %in% c("Unclassified", "MultipleMatched")])
-print(orphanData$numClusters) # number of real clusters
-length(orphanData$newRmSamples) # number of newly added samples to be removed
-length(orphanData$updatedRmList) # number of samples to be removed
-processedGenotypes$Status[processedGenotypes$Sample %in% orphanData$newRmSamples] <- "Orphan"
+# Get orphaned samples and mark them:
+print(length(GetOrphans(hiqSamples = samples75, allClusters = clustersAll))) # number of newly added samples to be removed
+processedGenotypes$Status[processedGenotypes$Sample %in% GetOrphans(samples75, clustersAll)] <- "Orphan"
 ```
 
 # Recluster without samples chosen to be removed:
@@ -120,8 +109,7 @@ uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = lo
 clustersFilt <- lapply(uniqueBearsFilt$pairwise, function(x) {x$match$index}) # get clusters from filt run
 finalGenotypes$Status[finalGenotypes$Sample %in% uniqueBearsFilt$unclassified$index] <- "Unclassified"
 finalGenotypes$Status[finalGenotypes$Sample %in% uniqueBearsFilt$multipleMatches$index] <- "MultipleMatched"
-orphanDataFilt <- GetOrphans(hiqClusters = clusters75, allClusters = clustersFilt, rmSamplesHiq = processedGenotypes$Sample[processedGenotypes$Status %in% c("Unclassified", "MultipleMatched", "Manual Removal")])
-finalGenotypes$Status[finalGenotypes$Sample %in% orphanDataFilt$newRmSamples] <- "Orphan"
+finalGenotypes$Status[finalGenotypes$Sample %in% GetOrphans(samples75, clustersFilt)] <- "Orphan"
 
 # Rerun again without all samples chosen to be removed
 loadedDataFilt <- LoadAMData(finalGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci

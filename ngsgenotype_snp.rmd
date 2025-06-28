@@ -96,29 +96,19 @@ library(readxl)
 
 finalGenotypes <- processedGenotypes
 
-# Import file with samples to be manually removed (optional):
-manualRmFile <- "../list_of_samples.xlsx" # specify file with samples to be removed in a column names 'SEP'
-geoProblems <- ifelse(manualRmFile %in% list.dirs('.'), readxl::read_excel(manualRmFile), data.frame(SEP = c()))
-finalGenotypes$Status[finalGenotypes$Sample %in% geoProblems$SEP] <- "Manual Removal"
-
 # Rerun analysis without noted samples:
 loadedDataFilt <- LoadAMData(finalGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
 uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = loadedDataFilt$AlleleKey, alleleMismatch = mmCutoff) # use stringent 10
 
-# Identify orphans, unclassified and multiple matches:
-clustersFilt <- lapply(uniqueBearsFilt$pairwise, function(x) {x$match$index}) # get clusters from filt run
-finalGenotypes$Status[finalGenotypes$Sample %in% uniqueBearsFilt$unclassified$index] <- "Unclassified"
-finalGenotypes$Status[finalGenotypes$Sample %in% uniqueBearsFilt$multipleMatches$index] <- "MultipleMatched"
-finalGenotypes$Status[finalGenotypes$Sample %in% GetOrphans(samples75, clustersFilt)] <- "Orphan"
-
-# Rerun again without all samples chosen to be removed
-loadedDataFilt <- LoadAMData(finalGenotypes, targetStatus = c("Medium Quality", "High Quality")) # Load all samples with 67 or more working loci
-uniqueBearsFilt <- allelematch::amUnique(loadedDataFilt$Data, multilocusMap = loadedDataFilt$AlleleKey, alleleMismatch = mmCutoff) # use stringent 10
+# Save results as report as well as csv-file:
 allelematch::summary.amUnique(object = uniqueBearsFilt, html = paste0("unique_bears_filt_", mmCutoff, "_v1.html"))
 allelematch::summary.amUnique(object = uniqueBearsFilt, csv = paste0("unique_bears_filt_", mmCutoff, "_v1.csv"))
 
-table(finalGenotypes$Status) # summarise statuses of samples
-View(uniqueBearsFilt)
+# Check if there are orphans still:
+print(GetOrphans(hiqSamples = samples75, allClusters = lapply(uniqueBearsFilt$pairwise, function(x) {x$match$index}))) # make sure that there are no orphans
+
+# Quick overview of statuses of samples:
+table(finalGenotypes$Status)
 ```
 
 # Calculate sex and generate statistics output:

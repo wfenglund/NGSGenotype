@@ -68,7 +68,7 @@ allelematch::summary.amUnique(object = uniqueBearsAll, csv = paste0("unique_bear
 
 # get clusters and high quality individuals:
 clustersAll <- lapply(uniqueBearsAll$pairwise, function(x) {x$match$index})
-samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # should this be placed after marking unclsassified/multiplematched? To avoid to not keep orphans by mistake?
+samples75 <- processedGenotypes$Sample[processedGenotypes$Status == "High Quality"] # should this be placed after marking unclassified/multiplematched? To avoid to not keep orphans by mistake?
 
 # check each one and see if they contain any matched sample from '75' run, note all samples in any who doesn't
 GetOrphans <- function(hiqSamples, allClusters) {
@@ -92,8 +92,7 @@ processedGenotypes$Status[processedGenotypes$Sample %in% GetOrphans(samples75, c
 
 # Recluster without samples chosen to be removed:
 ```{r}
-library(readxl)
-
+# Make new object:
 finalGenotypes <- processedGenotypes
 
 # Rerun analysis without noted samples:
@@ -111,7 +110,7 @@ print(GetOrphans(hiqSamples = samples75, allClusters = lapply(uniqueBearsFilt$pa
 table(finalGenotypes$Status)
 ```
 
-# Calculate sex and generate statistics output:
+# Calculate sex and generate statistics output: (remove?)
 ```{r}
 sexGenotypes$Status <- finalGenotypes$Status[match(sexGenotypes$Sample, finalGenotypes$Sample)]
 sexDetClusters <- sexGenotypes[sexGenotypes$Status %in% c("Medium Quality", "High Quality"),]
@@ -138,4 +137,103 @@ sexDetClusters$SNP_Sex <- bearSexSummary$SNP_sex[match(sexDetClusters$Cluster, b
 table(sexDetClusters$SNP_Sex) # summarise sex of samples
 statisticsOutFile <- cbind(sexDetClusters[, -c(8)], QCGenotypes[match(sexDetClusters$Sample, QCGenotypes$Sample), -c(1, 2)]) 
 writexl::write_xlsx(x = statisticsOutFile, path = "clustered_bear_samples_id_sex_genotypes_v1.xlsx")
+```
+
+# Rovbase input functions:
+```{r}
+SexChooser <- function(clusterName, martinDF, minimumX = 1, minimumY = 3) {
+  curMarkers <- martinDF[martinDF$Cluster == clusterName, ]
+  curMarkers[rowSums(curMarkers[grep("^X", colnames(curMarkers))] == "") == 3, ] <- "" # set all columns to nothing in case no X markers are present
+  presentX <- any(rowSums(curMarkers[grep("^X", colnames(curMarkers))] != "") >= minimumX)
+  presentY <- any(rowSums(curMarkers[grep("^Y", colnames(curMarkers))] != "") >= minimumY)
+  if(presentY) {
+    SNPSex <- "Hane"
+  } else if(presentX) {
+    SNPSex <- "Hona"
+  } else {
+    SNPSex <- "Obestämd"
+  }
+  return(data.frame(Cluster = clusterName, SNP_sex = SNPSex))
+}
+
+DetermineID <- function(allClusters, outDF, bearSexMeta = sexedBearIDs, SSRDataBecky = SSRDatabase) {
+  curClust <- allClusters[1]
+  remClusters <- allClusters[-1]
+  print(curClust)
+  testCluster <- bearSexMeta$Sample[bearSexMeta$Cluster == curClust]
+  testIds <- SSRDataBecky$individ[SSRDataBecky$index %in% testCluster] # try with one with several SSR samples
+  if(length(testIds) == 1) { # if one name found
+    outName <- testIds
+  } else if(length(testIds > 1)) {
+    if(length(unique(testIds)) == 1) { # if all names the same
+      outName <- testIds[1]
+    } else {
+      outName <- "0_MULTIPLE_NAMES" # if cluster has multiple different SSR IDs
+    }
+  } else { # if the cluster had no SSR name (new or otherwise)
+    outName <- "0_NO_NAME"
+  }
+  # Check if name is repeated, and if so handle:
+  if(outName %in% outDF$ID[grepl("^BI|^NRM_", outDF$ID)]) { # if name exists already
+    otherCluster <- outDF$Cluster[outDF$ID == outName]
+    otherSize <- sum(bearSexMeta$Cluster %in% otherCluster, na.rm = TRUE)
+    currSize <- sum(bearSexMeta$Cluster %in% curClust, na.rm = TRUE)
+    if(currSize > otherSize) { # if current cluster has more samples
+      outDF$ID[outDF$Cluster == otherCluster] <- "0_REPEATED_NAME" # name is kept for current and the other is changed
+    } else {
+      outName <- "0_REPEATED_NAME" # current cluster gets the new name since it is smaller
+    }
+  }
+  # Check if to recurse or return final output:
+  if(length(remClusters) > 0) {
+    DetermineID(remClusters, rbind(outDF, data.frame(Cluster = curClust, ID = outName)), bearSexMeta = bearSexMeta)
+  } else {
+    return(rbind(outDF, data.frame(Cluster = curClust, ID = outName)))
+  }
+} # failed bears are not handled well by this, BEAR gets multiple names tag for some reason
+
+SexChooserSample <- function(sampleName, allDataDF, minimumX = 1, minimumY = 3) {
+  sampleRow <- allDataDF[allDataDF$Sample == sampleName, ]
+  # sampleRow <- as.data.frame(sampleRow)
+  # sampleRow[is.na(sampleRow)] <- ""
+  # print(sampleRow)
+  sampleRow[rowSums(sampleRow[grep("^X", colnames(sampleRow))] == "") == 3, ] <- ""  # set all columns to nothing in case no X markers are present
+  presentX <- any(rowSums(sampleRow[grep("^X", colnames(sampleRow))] != "") >= minimumX)
+  presentY <- any(rowSums(sampleRow[grep("^Y", colnames(sampleRow))] != "") >= minimumY)
+  if(presentY) {
+    SNPSex <- "Hane"
+  } else if(presentX) {
+    SNPSex <- "Hona"
+  } else {
+    SNPSex <- "Obestämd"
+  }
+  return(SNPSex)
+}
+
+GenerateLopnummer <- function(clusterNames, allData, startNumber, lansbokstav, yearYY, outDF = data.frame(), deadStartNumber) {
+  # clusterName <- as.character(clusterNames[1])
+  clusterName <- clusterNames[1]
+  remClusters <- clusterNames[-1]
+  curSamples <- allData$Sample[allData$ID_ref == clusterName]
+  if(startsWith(unique(sexedBearIDs$ID_ref[sexedBearIDs$ID_ref == clusterName]), "BI")) {
+    outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = ""))
+    newNumber <- startNumber
+    newDeadNumber <- deadStartNumber
+  } else {
+    if(any(startsWith(curSamples, "M"))) {
+      outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = paste0("B", deadStartNumber, "+")))
+      newNumber <- startNumber
+      newDeadNumber <- deadStartNumber + 1
+    } else {
+      outDF <- rbind(outDF, data.frame(ID_ref = clusterName, Lopnummer = paste0(lansbokstav, yearYY, "-", startNumber)))
+      newNumber <- startNumber + 1
+      newDeadNumber <- deadStartNumber
+    }
+  }
+  if(length(remClusters) > 0) {
+    GenerateLopnummer(clusterNames = remClusters, allData = allData, startNumber = newNumber, lansbokstav = lansbokstav, yearYY = yearYY, outDF = outDF, deadStartNumber = newDeadNumber)
+  } else {
+    return(outDF)
+  }
+}
 ```

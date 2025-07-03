@@ -237,3 +237,70 @@ GenerateLopnummer <- function(clusterNames, allData, startNumber, lansbokstav, y
   }
 }
 ```
+
+# Rovbase object creation:
+```{r}
+# Make new object and load metadata:
+exportGenotypes <- finalGenotypes
+SSRDatabase <- read.table("../../../bears/bear_genotyping_2025/snp_genotyping_2025/SSR_database/newdb.csv", sep = ',', header = TRUE) # SSR database for tissues and previously non working cluster samples
+rovbaseMetaData <- as.data.frame(readxl::read_xlsx("../rovbase_metadata.xlsx"))
+
+# Remove geoproblems:
+# geoProblems <- as.data.frame(readxl::read_xlsx("../GeoQC.xlsx"))
+# geoProblems[is.na(geoProblems)] <- ""
+# exportGenotypes$Status[exportGenotypes$Sample %in% geoProblems$Sample[geoProblems$Action == "Only bear"]] <- "Manual Removal"
+
+# Generate individual sex:
+bearsFiltResult <- read.table(paste0("unique_bears_filt_", mmCutoff, "_v1.csv"), sep = ",", header = TRUE)
+sexGenotypes$StatusFinal <- exportGenotypes$Status[match(sexGenotypes$Sample, exportGenotypes$Sample)]
+sexedBearIDs <- sexGenotypes[sexGenotypes$StatusFinal %in% c("Medium Quality", "High Quality"),]
+sexedBearIDs$Cluster <- bearsFiltResult$uniqueIndex[match(sexedBearIDs$Sample, bearsFiltResult$matchIndex)]
+bearSexListRB <- lapply(unique(sexedBearIDs$Cluster), SexChooser, sexedBearIDs, minimumY = 3) # minimum 3 Y to be a male
+bearSexSummaryRB <- do.call(rbind, bearSexListRB)
+sexedBearIDs$SNP_Sex <- bearSexSummaryRB$SNP_sex[match(sexedBearIDs$Cluster, bearSexSummaryRB$Cluster)]
+
+# Get SSR IDs, handle zombie bears and generate NRM-names for new individuals:
+identityDF <- DetermineID(unique(sexedBearIDs$Cluster), data.frame(Cluster = c(), ID = c()))
+zombieBears <- c() # specify zombie bears
+zombieClusters <- sexedBearIDs$ClusterNum[sexedBearIDs$Sample %in% zombieBears] # get zombie clusters
+identityDF$ID[identityDF$Cluster %in% zombieClusters] <- "0_REPEATED_NAME" # give zombie clusters repeated name IDs
+nrmNumStart <- sort(as.numeric(gsub("NRM_", "", SSRDatabase$individ[grepl("^NRM_", SSRDatabase$individ)])), decreasing = TRUE)[1] + 1 # get nrm name start
+nrmNamesNew <- paste0("NRM_", nrmNumStart:(nrmNumStart + sum(identityDF$ID == "0_REPEATED_NAME", na.rm = TRUE) - 1)) # generate new nrm names
+identityDF$ID[identityDF$ID == "0_REPEATED_NAME"] <- nrmNamesNew # give nrm names to clusters with repeated names
+sexedBearIDs$ID_ref <- identityDF$ID[match(sexedBearIDs$Cluster, identityDF$Cluster)] # match IDs with clusters
+sexedBearIDs$ID_ref <- as.character(sexedBearIDs$ID_ref) # cast it as character since it is a weird form of character (read_xlsx?)
+
+# Handle clusters split by SSR (by trusting SSR):
+sexedBearIDs$ID_ref[sexedBearIDs$ID_ref == '0_MULTIPLE_NAMES'] <- SSRDatabase[match(sexedBearIDs$Sample[sexedBearIDs$ID_ref == '0_MULTIPLE_NAMES'], SSRDatabase$index), 8] # split multiple names cluster
+
+# Fix 0_NO_NAMES:
+exportGenotypes$Status[exportGenotypes$Sample %in% sexedBearIDs$Sample[sexedBearIDs$ID_ref == "0_NO_NAME"]] <- "No SSR Representative"
+sexedBearIDs <- sexedBearIDs[!(sexedBearIDs$ID_ref == "0_NO_NAME"), ]
+
+# Generate sample sex:
+sexedBearIDs$Sample_sex <- lapply(sexedBearIDs$Sample, SexChooserSample, sexedBearIDs)
+
+# Generate year found:
+sexedBearIDs$YearFound <- lapply(rovbaseMetaData$Funnetdato[match(sexedBearIDs$Sample, rovbaseMetaData$`Strekkode (Prøve)`)], function(x) {strsplit(as.character(x), "-")[[1]][1]})
+
+# Figure out highest löpnummer for new individuals found dead:
+rovbaseNamesLop <- unlist(lapply(strsplit(rovbaseMetaData$Individ, " "), `[`, 2))
+rovbaseNamesLop[is.na(rovbaseNamesLop)] <- ""
+rovbaseNamesLopDead <- max(as.numeric(gsub("B", "", rovbaseNamesLop[grepl("^B\\d+", rovbaseNamesLop)]))) + 1
+
+# Generate sample fylke:
+sexedBearIDs$Fylke <- rovbaseMetaData$Fylke[match(sexedBearIDs$Sample, rovbaseMetaData$`Strekkode (Prøve)`)]
+sexedBearIDs$Fylke[is.na(sexedBearIDs$Fylke)] <- ""
+
+# Generate löpnummer:
+lopnummerDF1 <- GenerateLopnummer(clusterNames = unique(sexedBearIDs$ID_ref[sexedBearIDs$Fylke == "Västernorrlands län (S)"]), allData = sexedBearIDs, startNumber = 1, lansbokstav = "Y", yearYY = "25", deadStartNumber = rovbaseNamesLopDead) # Västernorrland
+
+lopnummerDF2 <- GenerateLopnummer(clusterNames = unique(sexedBearIDs$ID_ref[sexedBearIDs$Fylke != "Västernorrlands län (S)"]), allData = sexedBearIDs, startNumber = 1, lansbokstav = "PROBLEM", yearYY = "25", deadStartNumber = max(as.numeric(gsub("B|\\+", "", lopnummerDF1$Lopnummer[grepl("^B\\d+\\+", lopnummerDF1$Lopnummer)]))) + 1) # everything else
+
+lopnummerDF <- rbind(lopnummerDF1, lopnummerDF2)
+sexedBearIDs$Löpnummer <- lopnummerDF$Lopnummer[match(sexedBearIDs$ID_ref, lopnummerDF$ID_ref)]
+
+# Remove NA values
+sexedBearIDs[is.na(sexedBearIDs)] <- ""
+
+```

@@ -244,6 +244,7 @@ GenerateLopnummer <- function(clusterNames, allData, startNumber, lansbokstav, y
 exportGenotypes <- finalGenotypes
 SSRDatabase <- read.table("../../../bears/bear_genotyping_2025/snp_genotyping_2025/SSR_database/newdb.csv", sep = ',', header = TRUE) # SSR database for tissues and previously non working cluster samples
 rovbaseMetaData <- as.data.frame(readxl::read_xlsx("../rovbase_metadata.xlsx"))
+zombieBears <- c() # specify zombie bear sample names
 
 # Remove geoproblems:
 # geoProblems <- as.data.frame(readxl::read_xlsx("../GeoQC.xlsx"))
@@ -261,7 +262,6 @@ sexedBearIDs$SNP_Sex <- bearSexSummaryRB$SNP_sex[match(sexedBearIDs$Cluster, bea
 
 # Get SSR IDs, handle zombie bears and generate NRM-names for new individuals:
 identityDF <- DetermineID(unique(sexedBearIDs$Cluster), data.frame(Cluster = c(), ID = c()))
-zombieBears <- c() # specify zombie bears
 zombieClusters <- sexedBearIDs$ClusterNum[sexedBearIDs$Sample %in% zombieBears] # get zombie clusters
 identityDF$ID[identityDF$Cluster %in% zombieClusters] <- "0_REPEATED_NAME" # give zombie clusters repeated name IDs
 nrmNumStart <- sort(as.numeric(gsub("NRM_", "", SSRDatabase$individ[grepl("^NRM_", SSRDatabase$individ)])), decreasing = TRUE)[1] + 1 # get nrm name start
@@ -302,5 +302,27 @@ sexedBearIDs$Löpnummer <- lopnummerDF$Lopnummer[match(sexedBearIDs$ID_ref, lopn
 
 # Remove NA values
 sexedBearIDs[is.na(sexedBearIDs)] <- ""
+```
 
+# Generate Rovbase input files:
+```{r}
+### Working samples (tissues and scats):
+## Generate rovbaseIndividDF:
+rovbaseIndividDF <- sexedBearIDs[!duplicated(sexedBearIDs$ID_ref) & grepl("NRM_", sexedBearIDs$ID_ref), ]
+rovbaseIndividDF <- cbind(ArtsID = "3", Individnavn = rovbaseIndividDF$Löpnummer, KjønnID = rovbaseIndividDF$SNP_Sex, Dødsår = rovbaseIndividDF$YearFound, Merknad = "")
+rovbaseIndividDF <- as.data.frame(rovbaseIndividDF)
+
+## Generate rovbaseInputWorking:
+rovbaseInputWorking <- cbind(DNAID = "", Strekkode = sexedBearIDs$Sample, RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = ifelse(sexedBearIDs$Sample_sex == "Hane", "1", ifelse(sexedBearIDs$Sample_sex == "Hona", "2", "3")), MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = gsub("NRM_.+", "", sexedBearIDs$ID_ref), IndividNavn = sexedBearIDs$Löpnummer, ReferanseID = "", Referansetekst = "")
+rovbaseInputWorking <- as.data.frame(rovbaseInputWorking)
+
+### Bear-only samples (non-working but identified as bear):
+{rovbaseInputBear <- exportGenotypes[!(exportGenotypes$Status %in% c("Control", "Fail Quality", "Medium Quality", "High Quality", "Exclude")), ] # remove all control, fully failed or working samples
+rovbaseInputBear <- cbind(DNAID = "", Strekkode = rovbaseInputBear[, "Sample"], RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = "3", MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = "", IndividNavn = "", ReferanseID = "", Referansetekst = "")}
+rovbaseInputBear <- as.data.frame(rovbaseInputBear)
+
+### Failed samples:
+{rovbaseInputFail <- exportGenotypes[exportGenotypes$Status == "Fail Quality", ] # extract failed samples
+rovbaseInputFail <- cbind(DNAID = "", Strekkode = rovbaseInputFail[, "Sample"], RovbaseID = "", ArtsID = "14", PrøvestatusID = "2", KjønnID = "3", MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = "", IndividNavn = "", ReferanseID = "", Referansetekst = "")}
+rovbaseInputFail <- as.data.frame(rovbaseInputFail)
 ```

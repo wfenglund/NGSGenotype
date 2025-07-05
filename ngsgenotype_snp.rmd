@@ -326,3 +326,29 @@ rovbaseInputBear <- as.data.frame(rovbaseInputBear)
 rovbaseInputFail <- cbind(DNAID = "", Strekkode = rovbaseInputFail[, "Sample"], RovbaseID = "", ArtsID = "14", PrøvestatusID = "2", KjønnID = "3", MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = "", IndividNavn = "", ReferanseID = "", Referansetekst = "")}
 rovbaseInputFail <- as.data.frame(rovbaseInputFail)
 ```
+
+# QC before final delivery:
+```{r}
+# RovbaseIndividDF:
+length(rovbaseIndividDF$Individnavn) == length(unique(rovbaseIndividDF$Individnavn))
+length(rovbaseIndividDF$Individnavn)
+length(unique(rovbaseIndividDF$Individnavn))
+
+allOutputNames <- c(rovbaseInputWorking$Strekkode, rovbaseInputBear$Strekkode, rovbaseInputFail$Strekkode)
+
+length(exportGenotypes$Sample)
+length(allOutputNames)
+length(unique(allOutputNames))
+View(exportGenotypes[!(exportGenotypes$Sample %in% allOutputNames),]) # the diff is accounted for: controls, manual removals 
+
+View(exportGenotypes[(exportGenotypes$Sample %in% rovbaseInputFail$Strekkode),]) # all are Fail Quality
+View(exportGenotypes[(exportGenotypes$Sample %in% rovbaseInputBear$Strekkode),])
+```
+
+# Construct output:
+```{r}
+writexl::write_xlsx(rbind(rovbaseInputWorking, rovbaseInputBear, rovbaseInputFail), "../Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
+
+test1 <- as.data.frame(apply(rovbaseIndividDF, 2, as.character))
+writexl::write_xlsx(test1, "../Analysresultat_björn_20XX_rovbase_nya_individ_v1_raw.xlsx")
+```

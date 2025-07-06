@@ -313,8 +313,8 @@ rovbaseIndividDF <- cbind(ArtsID = "3", Individnavn = rovbaseIndividDF$Löpnumme
 rovbaseIndividDF <- as.data.frame(rovbaseIndividDF)
 
 ## Generate rovbaseInputWorking:
-rovbaseInputWorking <- cbind(DNAID = "", Strekkode = sexedBearIDs$Sample, RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = ifelse(sexedBearIDs$Sample_sex == "Hane", "1", ifelse(sexedBearIDs$Sample_sex == "Hona", "2", "3")), MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = gsub("NRM_.+", "", sexedBearIDs$ID_ref), IndividNavn = sexedBearIDs$Löpnummer, ReferanseID = "", Referansetekst = "")
-rovbaseInputWorking <- as.data.frame(rovbaseInputWorking)
+rovbaseInputWork <- cbind(DNAID = "", Strekkode = sexedBearIDs$Sample, RovbaseID = "", ArtsID = "3", PrøvestatusID = "1", KjønnID = ifelse(sexedBearIDs$Sample_sex == "Hane", "1", ifelse(sexedBearIDs$Sample_sex == "Hona", "2", "3")), MetodeID = "32", AnalysertAvID = "10", Merknad = "", IndividID = gsub("NRM_.+", "", sexedBearIDs$ID_ref), IndividNavn = sexedBearIDs$Löpnummer, ReferanseID = "", Referansetekst = "")
+rovbaseInputWork <- as.data.frame(rovbaseInputWork)
 
 ### Bear-only samples (non-working but identified as bear):
 {rovbaseInputBear <- exportGenotypes[!(exportGenotypes$Status %in% c("Control", "Fail Quality", "Medium Quality", "High Quality", "Exclude")), ] # remove all control, fully failed or working samples
@@ -330,24 +330,26 @@ rovbaseInputFail <- as.data.frame(rovbaseInputFail)
 # QC before final delivery:
 ```{r}
 # RovbaseIndividDF:
-length(rovbaseIndividDF$Individnavn) == length(unique(rovbaseIndividDF$Individnavn))
-length(rovbaseIndividDF$Individnavn)
+length(rovbaseIndividDF$Individnavn) == length(unique(rovbaseIndividDF$Individnavn)) # is every Individnavn unique?
+length(rovbaseIndividDF$Individnavn) 
 length(unique(rovbaseIndividDF$Individnavn))
 
-allOutputNames <- c(rovbaseInputWorking$Strekkode, rovbaseInputBear$Strekkode, rovbaseInputFail$Strekkode)
+# All names written to outputs:
+allOutputNames <- c(rovbaseInputWork$Strekkode, rovbaseInputBear$Strekkode, rovbaseInputFail$Strekkode)
 
-length(exportGenotypes$Sample)
-length(allOutputNames)
-length(unique(allOutputNames))
-View(exportGenotypes[!(exportGenotypes$Sample %in% allOutputNames),]) # the diff is accounted for: controls, manual removals 
+length(exportGenotypes$Sample) # number of samples in
+length(allOutputNames) # number of samples out
+length(unique(allOutputNames)) # number of unique samples out
+View(exportGenotypes[!(exportGenotypes$Sample %in% allOutputNames),]) # did we lose any samples that should be kept?
 
-View(exportGenotypes[(exportGenotypes$Sample %in% rovbaseInputFail$Strekkode),]) # all are Fail Quality
-View(exportGenotypes[(exportGenotypes$Sample %in% rovbaseInputBear$Strekkode),])
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputWork$Strekkode)]) # statuses of working samples
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputBear$Strekkode)]) # statuses of only-bear samples
+table(exportGenotypes$Status[(exportGenotypes$Sample %in% rovbaseInputFail$Strekkode)]) # statuses of failed samples
 ```
 
 # Construct output:
 ```{r}
-writexl::write_xlsx(rbind(rovbaseInputWorking, rovbaseInputBear, rovbaseInputFail), "../Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
+writexl::write_xlsx(rbind(rovbaseInputWork, rovbaseInputBear, rovbaseInputFail), "../Analysresultat_björn_20XX_rovbase_prover_v1_raw.xlsx")
 
 test1 <- as.data.frame(apply(rovbaseIndividDF, 2, as.character))
 writexl::write_xlsx(test1, "../Analysresultat_björn_20XX_rovbase_nya_individ_v1_raw.xlsx")
